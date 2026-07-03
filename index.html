@@ -113,7 +113,7 @@
 
 <script src="lib/xlsx.full.min.js"></script>
 <script src="lib/exceljs.min.js"></script>
-<script src="attendance.js"></script>
+<script src="attendance.js?v=2"></script>
 <script>
 const C = window.AttendanceCore;
 let remarksMap = {};   // { employeeName: "Pantry" } — filled by the user at runtime, never hardcoded
@@ -349,7 +349,7 @@ function renderPreview(rows){
   html+=`<tr><td colspan="5" style="text-align:right">Grand Total</td><td class="num">${grand.toFixed(2)}</td></tr>`;
   preview.innerHTML=html; preview.classList.add('show');
 }
-document.getElementById('ver').textContent='v1.0';
+document.getElementById('ver').textContent='v1.1';
 </script>
 </body>
 </html>
