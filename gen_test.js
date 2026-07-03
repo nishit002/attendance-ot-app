@@ -9,14 +9,13 @@ const readAOA = (file, sheet) => {
   const wb = XLSX.readFile(path.join(DL, file));
   return XLSX.utils.sheet_to_json(wb.Sheets[sheet], { header:1, defval:null, raw:false });
 };
-const DEFAULT_REMARKS = { 'Arvind Kumar':'Pantry','Rai Singh':'Pantry','Babita':'HK','Mazammel Haque':'HK','Sagar Chauhan':'HK','Deepak Pandey':'Security' };
 const STATUS_FILL = { 'P':'FFC6EFCE','A':'FFFFC7CE','WO':'FFD9D9D9','½P':'FFFFEB9C','WOP':'FFBDD7EE','WO½P':'FFBDD7EE' };
 const HEADER_FILL='FF305496', GRAND_FILL='FFFFFF00';
 const THIN={style:'thin',color:{argb:'FFB0B0B0'}}, BORDER={top:THIN,left:THIN,right:THIN,bottom:THIN};
 const styleHeader=c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:HEADER_FILL}};c.font={bold:true,color:{argb:'FFFFFFFF'},size:10};c.alignment={horizontal:'center',vertical:'middle',wrapText:true};c.border=BORDER;};
 
 const parsed = C.parseMonthly(readAOA('Monthly Status Report.xls','BasicWorkDurationReport'));
-const summary = C.buildSummary(parsed,{otThreshHours:9,rate:50,remarks:DEFAULT_REMARKS});
+const summary = C.buildSummary(parsed,{otThreshHours:9,rate:50,remarks:{}});
 const opt={otThresh:9,rate:50,dropZero:true,period:'Jun 01 2026 To Jun 30 2026'};
 
 (async()=>{
@@ -53,7 +52,6 @@ const opt={otThresh:9,rate:50,dropZero:true,period:'Jun 01 2026 To Jun 30 2026'}
   const check=new ExcelJS.Workbook(); await check.xlsx.readFile(out);
   const d1=check.getWorksheet('Daily Attendance'); const s2=check.getWorksheet('Employee Summary');
   const grandCell=s2.getCell(rr,9);
-  const arvStatusCell=d1.getCell(5,4); // first day of Arvind (row5 = idx2? actually TEMP001 is row4)
   console.log('OUTPUT written:',out);
   console.log('Daily sheet dims:',d1.rowCount,'rows');
   console.log('Grand total cell value:',grandCell.value,' fill:',grandCell.fill&&grandCell.fill.fgColor&&grandCell.fill.fgColor.argb);

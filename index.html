@@ -95,6 +95,12 @@
     </div>
   </div>
 
+  <div class="card" id="remarksCard" style="display:none">
+    <h2>2b · Remarks <span class="hint">(optional — e.g. Pantry / HK / Security)</span></h2>
+    <div class="hint" style="margin-bottom:12px">Type a role/remark for any employee. Leave blank if not needed. This is only used to label the summary; it never leaves your browser.</div>
+    <div class="files" id="remarksList"></div>
+  </div>
+
   <div class="card">
     <h2>3 · Generate</h2>
     <button class="go" id="go" disabled>Upload a file to begin</button>
@@ -110,8 +116,7 @@
 <script src="attendance.js"></script>
 <script>
 const C = window.AttendanceCore;
-const DEFAULT_REMARKS = { 'Arvind Kumar':'Pantry','Rai Singh':'Pantry','Babita':'HK',
-  'Mazammel Haque':'HK','Sagar Chauhan':'HK','Deepak Pandey':'Security' };
+let remarksMap = {};   // { employeeName: "Pantry" } — filled by the user at runtime, never hardcoded
 
 const STATUS_FILL = { 'P':'FFC6EFCE','A':'FFFFC7CE','WO':'FFD9D9D9','½P':'FFFFEB9C','WOP':'FFBDD7EE','WO½P':'FFBDD7EE' };
 const HEADER_FILL = 'FF305496', HEADER_FONT = 'FFFFFFFF', GRAND_FILL = 'FFFFFF00';
@@ -186,8 +191,24 @@ function addChip(name,type){
 }
 
 function refreshReady(){
-  if(store.monthly){ goBtn.disabled=false; goBtn.textContent='Generate Attendance + OT workbook'; }
-  else { goBtn.disabled=true; goBtn.textContent='Upload the Monthly Status Report to begin'; }
+  if(store.monthly){ goBtn.disabled=false; goBtn.textContent='Generate Attendance + OT workbook'; renderRemarks(); }
+  else { goBtn.disabled=true; goBtn.textContent='Upload the Monthly Status Report to begin';
+    document.getElementById('remarksCard').style.display='none'; }
+}
+
+function renderRemarks(){
+  const card=document.getElementById('remarksCard'), list=document.getElementById('remarksList');
+  const workers=store.monthly.employees.filter(e=>e.totalMin>0);
+  if(!workers.length){ card.style.display='none'; return; }
+  card.style.display='block'; list.innerHTML='';
+  workers.forEach(e=>{
+    const row=document.createElement('div'); row.className='file';
+    const nm=document.createElement('span'); nm.className='nm'; nm.textContent=e.name+'  ['+e.code+']';
+    const inp=document.createElement('input'); inp.type='text'; inp.placeholder='remark (optional)';
+    inp.value=remarksMap[e.name]||''; inp.style.cssText='flex:0 0 200px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:14px';
+    inp.oninput=()=>{ remarksMap[e.name]=inp.value.trim(); };
+    row.appendChild(nm); row.appendChild(inp); list.appendChild(row);
+  });
 }
 
 function showBanner(kind,html){ banner.className='banner show '+kind; banner.innerHTML=html; }
@@ -201,7 +222,7 @@ goBtn.onclick = async () => {
     const rate = parseFloat(document.getElementById('rate').value)||0;
     const dropZero = document.getElementById('dropZero').checked;
     const parsed = store.monthly;
-    const summary = C.buildSummary(parsed,{otThreshHours:otThresh, rate:rate, remarks:DEFAULT_REMARKS});
+    const summary = C.buildSummary(parsed,{otThreshHours:otThresh, rate:rate, remarks:remarksMap});
 
     // ---- validation + warnings ----
     let notes = [], recon = null;

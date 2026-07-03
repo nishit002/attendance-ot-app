@@ -12,9 +12,7 @@ function aoa(file, sheet) {
 const monthly = Core.parseMonthly(aoa('Monthly Status Report.xls', 'BasicWorkDurationReport'));
 const daily = Core.parseDailyTotals(aoa('Daily Attendance Report.xls', 'DailyAttendance_DetailedReport'));
 
-const remarks = { 'Arvind Kumar': 'Pantry', 'Rai Singh': 'Pantry', 'Babita': 'HK',
-  'Mazammel Haque': 'HK', 'Sagar Chauhan': 'HK', 'Deepak Pandey': 'Security' };
-const rows = Core.buildSummary(monthly, { otThreshHours: 9, rate: 50, remarks });
+const rows = Core.buildSummary(monthly, { otThreshHours: 9, rate: 50, remarks: {} });
 
 console.log('Days parsed:', monthly.days.length, '| Employees:', monthly.employees.length);
 console.log('\nReconciliation (Monthly total vs Daily Tot.Dur.):');
