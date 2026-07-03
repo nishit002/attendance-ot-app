@@ -80,6 +80,80 @@
     return { days: days, employees: employees };
   }
 
+  // Normalize a Daily-report status string to the compact code used in the matrix
+  function normStatus(s) {
+    s = txt(s);
+    var weekly = /weekly/i.test(s);
+    var half = /½\s*present/i.test(s);
+    var present = /present/i.test(s);
+    if (weekly) return half ? 'WO½P' : (present ? 'WOP' : 'WO');
+    return half ? '½P' : (present ? 'P' : 'A');
+  }
+
+  var MONTHS = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+  var WD = ['S','M','T','W','Th','F','St']; // Sun..Sat, matching the monthly report's letters
+  function dayInfoFromDate(s) {
+    // "01-Jun-2026" -> { n: 1, label: 'M' }
+    s = txt(s);
+    var m = s.match(/(\d{1,2})[-\/\s]+([A-Za-z]{3,})[-\/\s]+(\d{4})/);
+    if (!m) return null;
+    var day = parseInt(m[1], 10), mon = MONTHS[m[2].slice(0, 3).toLowerCase()], yr = parseInt(m[3], 10);
+    var label = '';
+    if (mon != null) { label = WD[new Date(Date.UTC(yr, mon, day)).getUTCDay()]; }
+    return { n: day, label: label };
+  }
+
+  // ---- Parse the Daily Attendance Report into the SAME shape as parseMonthly ----
+  function parseDaily(aoa) {
+    // locate the detail-header columns
+    var codeCol = -1, nameCol = -1, totCol = -1, statCol = -1;
+    for (var r = 0; r < aoa.length; r++) {
+      var row = aoa[r] || [];
+      for (var c = 0; c < row.length; c++) {
+        var v = txt(row[c]);
+        if (v === 'E. Code') codeCol = c;
+        if (v === 'Name') nameCol = c;
+        if (v === 'Tot. Dur.') totCol = c;
+        if (v === 'Status') statCol = c;
+      }
+      if (codeCol !== -1 && totCol !== -1 && statCol !== -1) break;
+    }
+    if (codeCol === -1 || totCol === -1 || statCol === -1)
+      throw new Error('Could not find the detail header (E. Code / Tot. Dur. / Status) — is this the Daily Attendance Report?');
+
+    var dayMap = {};              // n -> {n,label}
+    var empOrder = [], byCode = {}; // code -> {code,name,status:{},min:{}}
+    var curDay = null;
+    for (var i = 0; i < aoa.length; i++) {
+      var rw = aoa[i] || [];
+      // date marker row?
+      if (txt(rw[0]) === 'Attendance Date :' || /Attendance Date/i.test(txt(rw[1]))) {
+        var dv = null;
+        for (var k = 0; k < rw.length; k++) {
+          var cell = txt(rw[k]);
+          if (cell && !/Attendance Date/i.test(cell) && cell !== ':') { if (/\d/.test(cell)) { dv = cell; break; } }
+        }
+        var di = dv ? dayInfoFromDate(dv) : null;
+        if (di) { curDay = di.n; dayMap[di.n] = di; }
+        continue;
+      }
+      var code = txt(rw[codeCol]);
+      if (!/^TEMP/i.test(code) || curDay == null) continue;
+      if (!byCode[code]) { byCode[code] = { code: code, name: txt(rw[nameCol]), status: {}, min: {} }; empOrder.push(code); }
+      byCode[code].status[curDay] = normStatus(rw[statCol]);
+      byCode[code].min[curDay] = toMin(rw[totCol]);
+    }
+
+    var days = Object.keys(dayMap).map(function (k) { return dayMap[k]; }).sort(function (a, b) { return a.n - b.n; });
+    if (!days.length) throw new Error('No attendance dates found in the Daily report.');
+    var employees = empOrder.map(function (code) {
+      var e = byCode[code], total = 0;
+      days.forEach(function (d) { if (e.min[d.n] == null) { e.min[d.n] = 0; e.status[d.n] = e.status[d.n] || ''; } total += e.min[d.n]; });
+      e.totalMin = total; return e;
+    });
+    return { days: days, employees: employees };
+  }
+
   // ---- Parse the Daily Attendance Report for cross-validation (sum of Tot. Dur.) ----
   function parseDailyTotals(aoa) {
     // find the detail header row to locate the "Tot. Dur." and "E. Code" columns
@@ -128,8 +202,9 @@
   }
 
   root.AttendanceCore = {
-    txt: txt, toMin: toMin, hhmm: hhmm, round2: round2,
-    parseMonthly: parseMonthly, parseDailyTotals: parseDailyTotals, buildSummary: buildSummary
+    txt: txt, toMin: toMin, hhmm: hhmm, round2: round2, normStatus: normStatus,
+    parseMonthly: parseMonthly, parseDaily: parseDaily,
+    parseDailyTotals: parseDailyTotals, buildSummary: buildSummary
   };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 

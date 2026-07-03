@@ -67,14 +67,14 @@
 <div class="wrap">
   <header>
     <h1>Attendance &amp; OT Sheet Generator</h1>
-    <p>Upload the biometric <b>Monthly Status Report</b> (.xls). Get a colored Attendance + OT workbook back — computed entirely in your browser, nothing is uploaded to any server.</p>
+    <p>Upload the biometric <b>Daily Attendance Report</b> (.xls). Get back a colored workbook with a monthly present/absent matrix and an OT costing summary — computed entirely in your browser, nothing is uploaded to any server.</p>
   </header>
 
   <div class="card">
     <h2>1 · Upload timesheet</h2>
     <div class="drop" id="drop">
       <div class="big">Drop the .xls file here, or click to browse</div>
-      <div class="sub">Monthly Status Report (required) &nbsp;·&nbsp; Daily Attendance Report (optional — enables a cross-check)</div>
+      <div class="sub">Daily Attendance Report (required) &nbsp;·&nbsp; Monthly Status Report (optional — enables a cross-check)</div>
     </div>
     <input type="file" id="fileInput" accept=".xls,.xlsx" multiple hidden>
     <div class="files" id="fileList"></div>
@@ -123,7 +123,9 @@ const HEADER_FILL = 'FF305496', HEADER_FONT = 'FFFFFFFF', GRAND_FILL = 'FFFFFF00
 const THIN = { style:'thin', color:{argb:'FFB0B0B0'} };
 const BORDER = { top:THIN,left:THIN,right:THIN,bottom:THIN };
 
-let store = { monthly:null, dailyRaw:null, monthlyName:null, period:null };
+let store = { daily:null, monthly:null, period:null };
+// primary source for the output = the Daily report (expected input); monthly is only an optional cross-check
+function primary(){ return store.daily || store.monthly; }
 
 // ---------- file handling ----------
 const drop = document.getElementById('drop');
@@ -157,22 +159,27 @@ function handleFiles(files){
       try{
         const wb = XLSX.read(e.target.result, { type:'array' });
         const names = wb.SheetNames;
-        if (names.includes('BasicWorkDurationReport') || names.some(n=>/BasicWorkDuration/i.test(n))){
-          const sh = wb.Sheets[names.find(n=>/BasicWorkDuration/i.test(n)) || names[0]];
-          const aoa = readAOA(sh);
-          store.monthly = C.parseMonthly(aoa);
-          store.monthlyName = f.name;
-          store.period = detectPeriod(aoa);
-          addChip(f.name,'monthly');
-        } else if (names.some(n=>/DailyAttendance/i.test(n))){
-          const sh = wb.Sheets[names.find(n=>/DailyAttendance/i.test(n))];
-          store.dailyRaw = C.parseDailyTotals(readAOA(sh));
+        const dailyName = names.find(n=>/DailyAttendance/i.test(n));
+        const monthlyName = names.find(n=>/BasicWorkDuration/i.test(n));
+        if (dailyName){
+          const aoa = readAOA(wb.Sheets[dailyName]);
+          store.daily = C.parseDaily(aoa);
+          store.period = detectPeriod(aoa) || store.period;
           addChip(f.name,'daily');
+        } else if (monthlyName){
+          const aoa = readAOA(wb.Sheets[monthlyName]);
+          store.monthly = C.parseMonthly(aoa);
+          store.period = detectPeriod(aoa) || store.period;
+          addChip(f.name,'monthly');
         } else {
-          // fall back: try to parse first sheet as monthly
-          try{ store.monthly = C.parseMonthly(readAOA(wb.Sheets[names[0]])); store.monthlyName=f.name;
-               store.period=detectPeriod(readAOA(wb.Sheets[names[0]])); addChip(f.name,'monthly'); }
-          catch{ addChip(f.name,'unknown'); showBanner('err','<b>Unrecognized file.</b> Expected the Monthly Status Report (sheet "BasicWorkDurationReport").'); }
+          // unknown sheet name — try daily first, then monthly, before giving up
+          let done=false;
+          for(const nm of names){
+            const aoa=readAOA(wb.Sheets[nm]);
+            try{ store.daily=C.parseDaily(aoa); store.period=detectPeriod(aoa)||store.period; addChip(f.name,'daily'); done=true; break; }catch(e1){}
+            try{ store.monthly=C.parseMonthly(aoa); store.period=detectPeriod(aoa)||store.period; addChip(f.name,'monthly'); done=true; break; }catch(e2){}
+          }
+          if(!done){ addChip(f.name,'unknown'); showBanner('err','<b>Unrecognized file.</b> Expected the <b>Daily Attendance Report</b> (.xls export from the biometric system).'); }
         }
         refreshReady();
       }catch(err){ showBanner('err','<b>Could not read '+f.name+':</b> '+err.message); }
@@ -186,19 +193,19 @@ function addChip(name,type){
   const label = type==='monthly'?'MONTHLY':type==='daily'?'DAILY':'?';
   div.innerHTML = `<span class="tag ${type}">${label}</span><span class="nm">${name}</span>`;
   const rm = document.createElement('button'); rm.className='rm'; rm.textContent='×';
-  rm.onclick = ()=>{ if(type==='monthly'){store.monthly=null;store.monthlyName=null;} if(type==='daily')store.dailyRaw=null; div.remove(); refreshReady(); };
+  rm.onclick = ()=>{ if(type==='monthly')store.monthly=null; if(type==='daily')store.daily=null; div.remove(); refreshReady(); };
   div.appendChild(rm); fileList.appendChild(div);
 }
 
 function refreshReady(){
-  if(store.monthly){ goBtn.disabled=false; goBtn.textContent='Generate Attendance + OT workbook'; renderRemarks(); }
-  else { goBtn.disabled=true; goBtn.textContent='Upload the Monthly Status Report to begin';
+  if(primary()){ goBtn.disabled=false; goBtn.textContent='Generate Attendance + OT workbook'; renderRemarks(); }
+  else { goBtn.disabled=true; goBtn.textContent='Upload the Daily Attendance Report to begin';
     document.getElementById('remarksCard').style.display='none'; }
 }
 
 function renderRemarks(){
   const card=document.getElementById('remarksCard'), list=document.getElementById('remarksList');
-  const workers=store.monthly.employees.filter(e=>e.totalMin>0);
+  const workers=primary().employees.filter(e=>e.totalMin>0);
   if(!workers.length){ card.style.display='none'; return; }
   card.style.display='block'; list.innerHTML='';
   workers.forEach(e=>{
@@ -215,20 +222,23 @@ function showBanner(kind,html){ banner.className='banner show '+kind; banner.inn
 
 // ---------- generate ----------
 goBtn.onclick = async () => {
-  if(!store.monthly) return;
+  if(!primary()) return;
   goBtn.disabled=true; goBtn.textContent='Building…';
   try{
     const otThresh = parseFloat(document.getElementById('otThresh').value)||0;
     const rate = parseFloat(document.getElementById('rate').value)||0;
     const dropZero = document.getElementById('dropZero').checked;
-    const parsed = store.monthly;
+    const parsed = primary();
     const summary = C.buildSummary(parsed,{otThreshHours:otThresh, rate:rate, remarks:remarksMap});
 
     // ---- validation + warnings ----
     let notes = [], recon = null;
-    if(store.dailyRaw){
+    if(store.daily && store.monthly){
+      // both files present -> reconcile per employee code on total minutes
+      const other = (parsed===store.daily) ? store.monthly : store.daily;
+      const oMap = {}; other.employees.forEach(e=>oMap[e.code]=e.totalMin);
       let ok=true, worst=0;
-      parsed.employees.forEach(e=>{ const dm=store.dailyRaw[e.code]||0; const d=Math.abs(e.totalMin-dm); if(d>0){ok=false; worst=Math.max(worst,d);} });
+      parsed.employees.forEach(e=>{ const om=oMap[e.code]||0; const d=Math.abs(e.totalMin-om); if(d>0){ok=false; worst=Math.max(worst,d);} });
       recon = ok ? 'ok' : worst;
     }
     const zero = parsed.employees.filter(e=>e.totalMin===0);
@@ -239,10 +249,10 @@ goBtn.onclick = async () => {
     dups.forEach(([n,cs])=> notes.push(`<b>${n}</b> appears under multiple codes: ${cs.join(', ')} — verify these aren't double-counted.`));
 
     let bhtml='';
-    if(recon==='ok') bhtml+='<b>✓ Cross-check passed.</b> Monthly totals reconcile exactly with the Daily Attendance Report (0-minute difference).<br>';
+    if(recon==='ok') bhtml+='<b>✓ Cross-check passed.</b> Daily and Monthly reports reconcile exactly (0-minute difference).<br>';
     else if(recon!==null) bhtml+=`<b>⚠ Cross-check:</b> largest gap ${recon} min between the two files — review before payroll.<br>`;
     if(notes.length) bhtml+='<b>Please review:</b><ul><li>'+notes.join('</li><li>')+'</li></ul>';
-    showBanner(recon==='ok'&&!notes.length?'ok':(notes.length?'warn':'ok'), bhtml||'<b>Workbook ready.</b>');
+    showBanner(notes.length?'warn':'ok', bhtml||'<b>Workbook ready.</b> Downloaded below.');
 
     // ---- build workbook ----
     const wb = await buildWorkbook(parsed, summary, {otThresh, rate, dropZero, period:store.period});

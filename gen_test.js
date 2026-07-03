@@ -14,7 +14,7 @@ const HEADER_FILL='FF305496', GRAND_FILL='FFFFFF00';
 const THIN={style:'thin',color:{argb:'FFB0B0B0'}}, BORDER={top:THIN,left:THIN,right:THIN,bottom:THIN};
 const styleHeader=c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:HEADER_FILL}};c.font={bold:true,color:{argb:'FFFFFFFF'},size:10};c.alignment={horizontal:'center',vertical:'middle',wrapText:true};c.border=BORDER;};
 
-const parsed = C.parseMonthly(readAOA('Monthly Status Report.xls','BasicWorkDurationReport'));
+const parsed = C.parseDaily(readAOA('Daily Attendance Report.xls','DailyAttendance_DetailedReport'));
 const summary = C.buildSummary(parsed,{otThreshHours:9,rate:50,remarks:{}});
 const opt={otThresh:9,rate:50,dropZero:true,period:'Jun 01 2026 To Jun 30 2026'};
 
