@@ -4,16 +4,28 @@ A zero-server web app that turns a biometric **Monthly Status Report** (`.xls`) 
 clean, **colored** Attendance + Overtime workbook — computed entirely in the browser.
 Nothing is uploaded anywhere; the file never leaves your device.
 
-## Live app
-👉 **https://nishit002.github.io/attendance-ot-app/**
+## Two ways to use it
+- **Web app:** 👉 **https://nishit002.github.io/attendance-ot-app/**
+- **Chrome extension:** open `chrome://extensions`, turn on **Developer mode**, click
+  **Load unpacked**, and select the [`extension/`](extension/) folder. Click the toolbar
+  icon to open the tool in a tab. (Same code, fully offline, nothing uploaded.)
 
-## What it does
-1. Upload the **Daily Attendance Report.xls** (sheet `DailyAttendance_DetailedReport`) — the
-   only file you need. Optionally also drop the **Monthly Status Report.xls** to enable an
-   automatic cross-check between the two.
-2. Set the two salary-linked inputs: **OT threshold** (hours/day, default 9) and
-   **per-hour costing** (default ₹50). Optionally type a remark (e.g. Pantry/HK/Security) per person.
-3. Click generate → a two-sheet `.xlsx` downloads:
+## Smart upload
+The tool detects what you drop and does the right thing — no mode switch needed:
+
+1. **Daily Attendance Report.xls** → generates a two-sheet workbook:
+   a colored **monthly attendance matrix** + a **cumulative OT summary** (all employees
+   consolidated into a grand total). Optionally also drop the **Monthly Status Report.xls**
+   for an automatic 0-minute cross-check.
+2. **A generated OT summary** (after the admin edits it — fixes someone's hours, changes a
+   rate, or adds a flat manual amount like Security ₹3000) → drop it back and the tool
+   **recomputes every row and the grand total**, downloading the updated cumulative file.
+   Rule: `Total Amount = OT Hrs × Per-hr costing`; rows with a flat manual amount are kept as-is.
+
+Set the two salary-linked inputs before generating: **OT threshold** (hours/day, default 9)
+and **per-hour costing** (default ₹50). Optionally type a remark (Pantry/HK/Security) per person.
+
+The generated workbook has two sheets:
    - **Daily Attendance** — every employee × each day, color-coded
      (green = Present, red = Absent, grey = Weekly Off, amber = Half day, blue = Worked-on-off).
    - **Employee Summary** — Worked Days, Total Worked Hrs, Total OT Hrs, per-hr costing,
