@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Attendance &amp; OT Sheet Generator</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#ffffff; --ink:#1c2434; --muted:#6b7488;
+    --line:#e3e7ef; --brand:#305496; --brand-2:#3b63b0; --ok:#1a8a4b;
+    --ok-bg:#e6f6ec; --warn:#9a6b00; --warn-bg:#fff6e0; --err:#b3261e; --err-bg:#fdecea;
+    --shadow:0 1px 3px rgba(20,30,60,.08),0 8px 24px rgba(20,30,60,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:32px 20px 80px}
+  header h1{font-size:26px;margin:0 0 4px;letter-spacing:-.3px}
+  header p{margin:0;color:var(--muted);font-size:15px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:22px;margin-top:22px;box-shadow:var(--shadow)}
+  .card h2{font-size:15px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);
+    margin:0 0 14px;font-weight:600}
+  .drop{border:2px dashed #c4ccdd;border-radius:12px;padding:34px 20px;text-align:center;
+    cursor:pointer;transition:.15s;background:#fafbfe}
+  .drop:hover,.drop.hot{border-color:var(--brand-2);background:#f0f4fd}
+  .drop .big{font-size:16px;font-weight:600}
+  .drop .sub{color:var(--muted);font-size:13px;margin-top:6px}
+  .files{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+  .file{display:flex;align-items:center;gap:10px;font-size:14px;padding:9px 12px;
+    background:#f4f7fc;border:1px solid var(--line);border-radius:9px}
+  .file .tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;color:#fff}
+  .tag.monthly{background:var(--brand)} .tag.daily{background:#5a7a3b} .tag.unknown{background:#9aa1b2}
+  .file .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file .rm{color:var(--muted);cursor:pointer;font-weight:700;border:none;background:none;font-size:16px}
+  .opts{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:560px){.opts{grid-template-columns:1fr}}
+  label.field{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:#3a4252}
+  .field input[type=number]{padding:10px 12px;border:1px solid var(--line);border-radius:9px;
+    font-size:15px;font-family:inherit}
+  .check{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:500;color:#3a4252;grid-column:1/-1}
+  .check input{width:18px;height:18px}
+  .hint{font-size:12px;color:var(--muted);font-weight:400}
+  button.go{margin-top:22px;width:100%;padding:15px;border:none;border-radius:11px;
+    background:var(--brand);color:#fff;font-size:16px;font-weight:700;cursor:pointer;transition:.15s}
+  button.go:hover{background:#264073}
+  button.go:disabled{background:#b6bfd2;cursor:not-allowed}
+  .banner{border-radius:10px;padding:13px 15px;margin-top:16px;font-size:14px;display:none}
+  .banner.show{display:block}
+  .banner.ok{background:var(--ok-bg);color:var(--ok);border:1px solid #b9e6c8}
+  .banner.warn{background:var(--warn-bg);color:var(--warn);border:1px solid #f0dfa0}
+  .banner.err{background:var(--err-bg);color:var(--err);border:1px solid #f3c4c0}
+  .banner b{font-weight:700}
+  .banner ul{margin:8px 0 0;padding-left:20px}
+  table.prev{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;display:none}
+  table.prev.show{display:table}
+  table.prev th{background:var(--brand);color:#fff;padding:9px 8px;text-align:left;font-weight:600}
+  table.prev td{padding:8px;border-bottom:1px solid var(--line)}
+  table.prev tr:last-child td{font-weight:700;background:#fffbe6}
+  table.prev td.num{text-align:right;font-variant-numeric:tabular-nums}
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:30px}
+  code{background:#eef1f7;padding:1px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Attendance &amp; OT Sheet Generator</h1>
+    <p>Upload the biometric <b>Monthly Status Report</b> (.xls). Get a colored Attendance + OT workbook back — computed entirely in your browser, nothing is uploaded to any server.</p>
+  </header>
+
+  <div class="card">
+    <h2>1 · Upload timesheet</h2>
+    <div class="drop" id="drop">
+      <div class="big">Drop the .xls file here, or click to browse</div>
+      <div class="sub">Monthly Status Report (required) &nbsp;·&nbsp; Daily Attendance Report (optional — enables a cross-check)</div>
+    </div>
+    <input type="file" id="fileInput" accept=".xls,.xlsx" multiple hidden>
+    <div class="files" id="fileList"></div>
+  </div>
+
+  <div class="card">
+    <h2>2 · Settings <span class="hint">(salary-linked — confirm these)</span></h2>
+    <div class="opts">
+      <label class="field">OT counted beyond (hours/day)
+        <input type="number" id="otThresh" value="9" min="0" max="24" step="0.5">
+      </label>
+      <label class="field">Per-hour costing (₹)
+        <input type="number" id="rate" value="50" min="0" step="1">
+      </label>
+      <label class="check"><input type="checkbox" id="dropZero" checked>
+        Exclude employees with 0 hours all month from the summary <span class="hint">(they still appear in the daily matrix)</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3 · Generate</h2>
+    <button class="go" id="go" disabled>Upload a file to begin</button>
+    <div class="banner" id="banner"></div>
+    <table class="prev" id="preview"></table>
+  </div>
+
+  <footer>Runs 100% offline in your browser · No data leaves your device · <span id="ver"></span></footer>
+</div>
+
+<script src="lib/xlsx.full.min.js"></script>
+<script src="lib/exceljs.min.js"></script>
+<script src="attendance.js"></script>
+<script>
+const C = window.AttendanceCore;
+const DEFAULT_REMARKS = { 'Arvind Kumar':'Pantry','Rai Singh':'Pantry','Babita':'HK',
+  'Mazammel Haque':'HK','Sagar Chauhan':'HK','Deepak Pandey':'Security' };
+
+const STATUS_FILL = { 'P':'FFC6EFCE','A':'FFFFC7CE','WO':'FFD9D9D9','½P':'FFFFEB9C','WOP':'FFBDD7EE','WO½P':'FFBDD7EE' };
+const HEADER_FILL = 'FF305496', HEADER_FONT = 'FFFFFFFF', GRAND_FILL = 'FFFFFF00';
+const THIN = { style:'thin', color:{argb:'FFB0B0B0'} };
+const BORDER = { top:THIN,left:THIN,right:THIN,bottom:THIN };
+
+let store = { monthly:null, dailyRaw:null, monthlyName:null, period:null };
+
+// ---------- file handling ----------
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const banner = document.getElementById('banner');
+const goBtn = document.getElementById('go');
+const preview = document.getElementById('preview');
+
+drop.onclick = () => fileInput.click();
+['dragover','dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('hot'); }));
+['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('hot'); }));
+drop.addEventListener('drop', ev => handleFiles(ev.dataTransfer.files));
+fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+function readAOA(sheet){ return XLSX.utils.sheet_to_json(sheet,{header:1,defval:null,raw:false}); }
+
+function detectPeriod(aoa){
+  for(const row of aoa){ for(const cell of (row||[])){
+    const s = C.txt(cell);
+    const m = s.match(/([A-Za-z]{3}\s+\d{1,2}\s+\d{4})\s+To\s+([A-Za-z]{3}\s+\d{1,2}\s+\d{4})/);
+    if(m) return m[0].replace(/\s+/g,' ');
+  }}
+  return null;
+}
+
+function handleFiles(files){
+  [...files].forEach(f => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try{
+        const wb = XLSX.read(e.target.result, { type:'array' });
+        const names = wb.SheetNames;
+        if (names.includes('BasicWorkDurationReport') || names.some(n=>/BasicWorkDuration/i.test(n))){
+          const sh = wb.Sheets[names.find(n=>/BasicWorkDuration/i.test(n)) || names[0]];
+          const aoa = readAOA(sh);
+          store.monthly = C.parseMonthly(aoa);
+          store.monthlyName = f.name;
+          store.period = detectPeriod(aoa);
+          addChip(f.name,'monthly');
+        } else if (names.some(n=>/DailyAttendance/i.test(n))){
+          const sh = wb.Sheets[names.find(n=>/DailyAttendance/i.test(n))];
+          store.dailyRaw = C.parseDailyTotals(readAOA(sh));
+          addChip(f.name,'daily');
+        } else {
+          // fall back: try to parse first sheet as monthly
+          try{ store.monthly = C.parseMonthly(readAOA(wb.Sheets[names[0]])); store.monthlyName=f.name;
+               store.period=detectPeriod(readAOA(wb.Sheets[names[0]])); addChip(f.name,'monthly'); }
+          catch{ addChip(f.name,'unknown'); showBanner('err','<b>Unrecognized file.</b> Expected the Monthly Status Report (sheet "BasicWorkDurationReport").'); }
+        }
+        refreshReady();
+      }catch(err){ showBanner('err','<b>Could not read '+f.name+':</b> '+err.message); }
+    };
+    reader.readAsArrayBuffer(f);
+  });
+}
+
+function addChip(name,type){
+  const div = document.createElement('div'); div.className='file';
+  const label = type==='monthly'?'MONTHLY':type==='daily'?'DAILY':'?';
+  div.innerHTML = `<span class="tag ${type}">${label}</span><span class="nm">${name}</span>`;
+  const rm = document.createElement('button'); rm.className='rm'; rm.textContent='×';
+  rm.onclick = ()=>{ if(type==='monthly'){store.monthly=null;store.monthlyName=null;} if(type==='daily')store.dailyRaw=null; div.remove(); refreshReady(); };
+  div.appendChild(rm); fileList.appendChild(div);
+}
+
+function refreshReady(){
+  if(store.monthly){ goBtn.disabled=false; goBtn.textContent='Generate Attendance + OT workbook'; }
+  else { goBtn.disabled=true; goBtn.textContent='Upload the Monthly Status Report to begin'; }
+}
+
+function showBanner(kind,html){ banner.className='banner show '+kind; banner.innerHTML=html; }
+
+// ---------- generate ----------
+goBtn.onclick = async () => {
+  if(!store.monthly) return;
+  goBtn.disabled=true; goBtn.textContent='Building…';
+  try{
+    const otThresh = parseFloat(document.getElementById('otThresh').value)||0;
+    const rate = parseFloat(document.getElementById('rate').value)||0;
+    const dropZero = document.getElementById('dropZero').checked;
+    const parsed = store.monthly;
+    const summary = C.buildSummary(parsed,{otThreshHours:otThresh, rate:rate, remarks:DEFAULT_REMARKS});
+
+    // ---- validation + warnings ----
+    let notes = [], recon = null;
+    if(store.dailyRaw){
+      let ok=true, worst=0;
+      parsed.employees.forEach(e=>{ const dm=store.dailyRaw[e.code]||0; const d=Math.abs(e.totalMin-dm); if(d>0){ok=false; worst=Math.max(worst,d);} });
+      recon = ok ? 'ok' : worst;
+    }
+    const zero = parsed.employees.filter(e=>e.totalMin===0);
+    // duplicate names across different codes
+    const byName = {}; parsed.employees.forEach(e=>{ (byName[e.name]=byName[e.name]||[]).push(e.code); });
+    const dups = Object.entries(byName).filter(([n,cs])=>cs.length>1);
+    if(zero.length) notes.push(`${zero.length} employee(s) have <b>0 hours all month</b> (${zero.map(e=>e.name+' ['+e.code+']').join(', ')}). ${dropZero?'Excluded from summary; still in daily matrix.':'Included as-is.'}`);
+    dups.forEach(([n,cs])=> notes.push(`<b>${n}</b> appears under multiple codes: ${cs.join(', ')} — verify these aren't double-counted.`));
+
+    let bhtml='';
+    if(recon==='ok') bhtml+='<b>✓ Cross-check passed.</b> Monthly totals reconcile exactly with the Daily Attendance Report (0-minute difference).<br>';
+    else if(recon!==null) bhtml+=`<b>⚠ Cross-check:</b> largest gap ${recon} min between the two files — review before payroll.<br>`;
+    if(notes.length) bhtml+='<b>Please review:</b><ul><li>'+notes.join('</li><li>')+'</li></ul>';
+    showBanner(recon==='ok'&&!notes.length?'ok':(notes.length?'warn':'ok'), bhtml||'<b>Workbook ready.</b>');
+
+    // ---- build workbook ----
+    const wb = await buildWorkbook(parsed, summary, {otThresh, rate, dropZero, period:store.period});
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = (store.period||'').replace(/[^A-Za-z0-9]+/g,'_') || 'output';
+    a.href=url; a.download='Attendance_OT_'+stamp+'.xlsx'; a.click();
+    URL.revokeObjectURL(url);
+
+    renderPreview(summary.filter(r=>!(dropZero&&r.totalHrs===0)));
+  }catch(err){ showBanner('err','<b>Generation failed:</b> '+err.message); }
+  goBtn.disabled=false; goBtn.textContent='Generate Attendance + OT workbook';
+};
+
+function styleHeader(cell){ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:HEADER_FILL}};
+  cell.font={bold:true,color:{argb:HEADER_FONT},size:10}; cell.alignment={horizontal:'center',vertical:'middle',wrapText:true}; cell.border=BORDER; }
+
+async function buildWorkbook(parsed, summary, opt){
+  const wb = new ExcelJS.Workbook();
+  const periodTxt = opt.period ? ' ('+opt.period+')' : '';
+
+  // ===== Sheet 1: Daily Attendance =====
+  const ws = wb.addWorksheet('Daily Attendance');
+  const nCols = 3 + parsed.days.length + 1;
+  ws.mergeCells(1,1,1,nCols);
+  const t = ws.getCell(1,1); t.value='Daily Attendance — Present/Absent by Day'+periodTxt;
+  t.font={bold:true,size:13};
+  const H=3;
+  ws.getCell(H,1).value='S.No'; ws.getCell(H,2).value='E. Code'; ws.getCell(H,3).value='Name';
+  parsed.days.forEach((d,k)=>{ ws.getCell(H,4+k).value=d.n+(d.label?'\n'+d.label:''); });
+  ws.getCell(H,4+parsed.days.length).value='Present Days';
+  for(let c=1;c<=nCols;c++) styleHeader(ws.getCell(H,c));
+  let r=H+1;
+  parsed.employees.forEach((e,idx)=>{
+    ws.getCell(r,1).value=idx+1; ws.getCell(r,2).value=e.code; ws.getCell(r,3).value=e.name;
+    let worked=0;
+    parsed.days.forEach((d,k)=>{
+      const st=e.status[d.n]; const cell=ws.getCell(r,4+k);
+      cell.value=st; cell.alignment={horizontal:'center',vertical:'middle'};
+      if(STATUS_FILL[st]) cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:STATUS_FILL[st]}};
+      if(e.min[d.n]>0) worked++;
+    });
+    ws.getCell(r,4+parsed.days.length).value=worked;
+    for(let c=1;c<=nCols;c++){ const cc=ws.getCell(r,c); cc.border=BORDER;
+      if(c!==3) cc.alignment=Object.assign({horizontal:'center',vertical:'middle'},cc.alignment); }
+    r++;
+  });
+  // legend
+  const lr=r+1; ws.getCell(lr,3).value='Legend:'; ws.getCell(lr,3).font={bold:true};
+  const legend=[['P','Present'],['A','Absent'],['WO','Weekly Off'],['½P','Half Day'],['WOP','Worked on Weekly Off'],['WO½P','Half day on Weekly Off']];
+  legend.forEach(([code,desc],k)=>{ const cc=ws.getCell(lr+1+k,3); cc.value=code; cc.alignment={horizontal:'center'}; cc.border=BORDER;
+    if(STATUS_FILL[code]) cc.fill={type:'pattern',pattern:'solid',fgColor:{argb:STATUS_FILL[code]}};
+    ws.getCell(lr+1+k,4).value=desc; });
+  ws.views=[{state:'frozen',xSplit:3,ySplit:3}];
+  ws.getColumn(1).width=6; ws.getColumn(2).width=11; ws.getColumn(3).width=18;
+  parsed.days.forEach((d,k)=> ws.getColumn(4+k).width=5);
+  ws.getColumn(4+parsed.days.length).width=8;
+
+  // ===== Sheet 2: Employee Summary =====
+  const ws2 = wb.addWorksheet('Employee Summary');
+  ws2.mergeCells('A1:I1');
+  const t2=ws2.getCell('A1'); t2.value='Employee Monthly Summary — Total Hours & OT'+periodTxt; t2.font={bold:true,size:13};
+  ws2.mergeCells('A2:I2');
+  const nt=ws2.getCell('A2');
+  nt.value=`OT = hours worked beyond ${opt.otThresh}:00/day (summed).  Per-hr costing = ₹${opt.rate} (col H).  ${opt.dropZero?'0-hour employees excluded — see Daily Attendance sheet.':'All employees included.'}`;
+  nt.font={italic:true,size:9,color:{argb:'FF808080'}};
+  const heads=['S. No','E. Code','Name','Remarks','Worked Days','Total Worked Hrs',`Total OT Hrs (>${opt.otThresh}/day)`,'Per hr costing','Total Amount'];
+  const HR=4; heads.forEach((h,c)=>{ ws2.getCell(HR,c+1).value=h; styleHeader(ws2.getCell(HR,c+1)); });
+  const rows = summary.filter(row => !(opt.dropZero && row.totalHrs===0));
+  let rr=HR+1, sno=1, grand=0;
+  rows.forEach(row=>{
+    grand+=row.amount;
+    const vals=[sno,row.code,row.name,row.remarks,row.workedDays,row.totalHrs,row.otHrs,row.rate,row.amount];
+    vals.forEach((v,c)=>{ const cc=ws2.getCell(rr,c+1); cc.value=v; cc.border=BORDER;
+      cc.alignment={horizontal:(c===2?'left':'center'),vertical:'middle'}; });
+    ws2.getCell(rr,6).numFmt='0.00'; ws2.getCell(rr,7).numFmt='0.00'; ws2.getCell(rr,9).numFmt='#,##0.00';
+    sno++; rr++;
+  });
+  const g1=ws2.getCell(rr,8); g1.value='Grand Total'; g1.font={bold:true}; g1.alignment={horizontal:'right'}; g1.border=BORDER;
+  const g2=ws2.getCell(rr,9); g2.value=C.round2(grand); g2.font={bold:true}; g2.numFmt='#,##0.00';
+  g2.fill={type:'pattern',pattern:'solid',fgColor:{argb:GRAND_FILL}}; g2.border=BORDER;
+  const widths=[6,11,18,10,12,16,20,13,14]; widths.forEach((w,c)=> ws2.getColumn(c+1).width=w);
+  ws2.views=[{state:'frozen',ySplit:4}];
+  return wb;
+}
+
+function renderPreview(rows){
+  let grand=0;
+  let html='<tr><th>S.No</th><th>Name</th><th>Remarks</th><th>Worked Hrs</th><th>OT Hrs</th><th>Amount ₹</th></tr>';
+  rows.forEach((r,i)=>{ grand+=r.amount;
+    html+=`<tr><td>${i+1}</td><td>${r.name}</td><td>${r.remarks||''}</td><td class="num">${r.totalHrs.toFixed(2)}</td><td class="num">${r.otHrs.toFixed(2)}</td><td class="num">${r.amount.toFixed(2)}</td></tr>`; });
+  html+=`<tr><td colspan="5" style="text-align:right">Grand Total</td><td class="num">${grand.toFixed(2)}</td></tr>`;
+  preview.innerHTML=html; preview.classList.add('show');
+}
+document.getElementById('ver').textContent='v1.0';
+</script>
+</body>
+</html>
